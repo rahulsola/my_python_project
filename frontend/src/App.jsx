@@ -412,7 +412,7 @@ function App() {
                 VK
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-slate-800 leading-none">Vinayak K.</p>
+                <p className="text-xs font-bold text-slate-800 leading-none">Rahul S.</p>
                 <p className="text-[10px] font-semibold text-slate-400">Administrator</p>
               </div>
             </div>
@@ -427,7 +427,7 @@ function App() {
               {/* Dash Welcome Banner */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl p-6 shadow-lg shadow-blue-700/10">
                 <div>
-                  <h1 className="text-2xl font-extrabold tracking-tight">Welcome back, Vinayak!</h1>
+                  <h1 className="text-2xl font-extrabold tracking-tight">Welcome back, Rahul!</h1>
                   <p className="text-blue-100 text-sm mt-1">Here is a quick snapshot of your systems, users, and catalog inventory.</p>
                 </div>
                 <button
@@ -951,7 +951,7 @@ function App() {
                 <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Full Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. Vinayak Kulkarni"
+                  placeholder="e.g. Rahul Solanki"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
                   value={userForm.name}
                   onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
@@ -963,7 +963,7 @@ function App() {
                 <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Email Address</label>
                 <input
                   type="email"
-                  placeholder="e.g. vinayak@example.com"
+                  placeholder="e.g. Rahul@example.com"
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
                   value={userForm.email}
                   onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
