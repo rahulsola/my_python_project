@@ -20,3 +20,17 @@ class Product(Base):
     price = Column(Float, default=0.0)
     stock = Column(Integer, default=0)
     category = Column(String, index=True)
+
+
+class Game(Base):
+    __tablename__ = "games"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, index=True)
+    description = Column(String, nullable=True)
+    genre = Column(String, index=True)
+    platform = Column(String, index=True)
+    release_year = Column(Integer)
+    rating = Column(Float, default=0.0)
+    price = Column(Float, default=0.0)
+    image_url = Column(String, nullable=True)

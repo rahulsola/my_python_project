@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import API from "./api/userApi";
+import ArcadeCabinet from "./components/ArcadeCabinet";
 
 function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -30,15 +31,45 @@ function App() {
   const [editingProductId, setEditingProductId] = useState(null);
   const [showProductModal, setShowProductModal] = useState(false);
 
+  // States for Games
+  const [games, setGames] = useState([]);
+  const [gameSearchQuery, setGameSearchQuery] = useState("");
+  const [selectedGenre, setSelectedGenre] = useState("All");
+  const [selectedPlatform, setSelectedPlatform] = useState("All");
+  const [gameForm, setGameForm] = useState({
+    title: "",
+    description: "",
+    genre: "",
+    platform: "",
+    release_year: "",
+    rating: "",
+    price: "",
+    image_url: "",
+  });
+  const [editingGameId, setEditingGameId] = useState(null);
+  const [showGameModal, setShowGameModal] = useState(false);
+
+  // States for Interactive Play Mode
+  const [activePlayGame, setActivePlayGame] = useState(null); // stores game object when playing
+  const [arcadeHighScore, setArcadeHighScore] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("arcade_high_scores") || "{}");
+    } catch {
+      return {};
+    }
+  });
+
   // States for Dashboard Stats
   const [stats, setStats] = useState({
     total_users: 0,
     total_products: 0,
+    total_games: 0,
     total_stock: 0,
     total_inventory_value: 0,
     avg_product_price: 0,
     recent_users: [],
     recent_products: [],
+    recent_games: [],
   });
 
   // States for Toast Notification
@@ -61,6 +92,7 @@ function App() {
           ...response.data,
           recent_users: Array.isArray(response.data.recent_users) ? response.data.recent_users : [],
           recent_products: Array.isArray(response.data.recent_products) ? response.data.recent_products : [],
+          recent_games: Array.isArray(response.data.recent_games) ? response.data.recent_games : [],
         });
       } else {
         console.error("Expected a stats object, but got:", response.data);
@@ -102,10 +134,26 @@ function App() {
     }
   };
 
+  // Fetch Games
+  const fetchGames = async () => {
+    try {
+      const response = await API.get("/games");
+      if (Array.isArray(response.data)) {
+        setGames(response.data);
+      } else {
+        console.error("Expected an array of games, but got:", response.data);
+        setGames([]);
+      }
+    } catch (error) {
+      console.error("Error fetching games:", error);
+      showToast("Failed to fetch games", "error");
+    }
+  };
+
   // Initial Data Fetch
   useEffect(() => {
     setLoading(true);
-    Promise.all([fetchStats(), fetchUsers(), fetchProducts()]).finally(() => {
+    Promise.all([fetchStats(), fetchUsers(), fetchProducts(), fetchGames()]).finally(() => {
       setLoading(false);
     });
   }, []);
@@ -246,6 +294,123 @@ function App() {
     }
   };
 
+  // Handle Game Create / Update
+  const handleGameSubmit = async (e) => {
+    e.preventDefault();
+    if (!gameForm.title || !gameForm.genre || !gameForm.platform || !gameForm.release_year || !gameForm.rating || !gameForm.price) {
+      showToast("Please fill in all required game fields", "error");
+      return;
+    }
+
+    const payload = {
+      title: gameForm.title,
+      description: gameForm.description || "",
+      genre: gameForm.genre,
+      platform: gameForm.platform,
+      release_year: parseInt(gameForm.release_year, 10),
+      rating: parseFloat(gameForm.rating),
+      price: parseFloat(gameForm.price),
+      image_url: gameForm.image_url || "",
+    };
+
+    if (isNaN(payload.release_year) || payload.release_year < 1950 || payload.release_year > 2100) {
+      showToast("Release year must be a valid year", "error");
+      return;
+    }
+    if (isNaN(payload.rating) || payload.rating < 0 || payload.rating > 10) {
+      showToast("Rating must be between 0 and 10", "error");
+      return;
+    }
+    if (isNaN(payload.price) || payload.price < 0) {
+      showToast("Price must be a valid positive number", "error");
+      return;
+    }
+
+    try {
+      if (editingGameId) {
+        // Update Game
+        await API.put(`/games/${editingGameId}`, payload);
+        showToast("Game updated successfully!");
+      } else {
+        // Create Game
+        await API.post("/games", payload);
+        showToast("Game created successfully!");
+      }
+      // Reset form and modal
+      setGameForm({ title: "", description: "", genre: "", platform: "", release_year: "", rating: "", price: "", image_url: "" });
+      setEditingGameId(null);
+      setShowGameModal(false);
+      fetchGames();
+      fetchStats();
+    } catch (error) {
+      console.error("Error submitting game:", error);
+      showToast(error.response?.data?.detail || "An error occurred with game operation", "error");
+    }
+  };
+
+  // Setup Game Editing
+  const openEditGame = (game) => {
+    setEditingGameId(game.id);
+    setGameForm({
+      title: game.title,
+      description: game.description || "",
+      genre: game.genre,
+      platform: game.platform,
+      release_year: game.release_year.toString(),
+      rating: game.rating.toString(),
+      price: game.price.toString(),
+      image_url: game.image_url || "",
+    });
+    setShowGameModal(true);
+  };
+
+  // Delete Game
+  const handleDeleteGame = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this game?")) return;
+    try {
+      await API.delete(`/games/${id}`);
+      showToast("Game deleted successfully!");
+      fetchGames();
+      fetchStats();
+    } catch (error) {
+      console.error("Error deleting game:", error);
+      showToast("Failed to delete game", "error");
+    }
+  };
+
+  // Update high score helper
+  const updateArcadeHighScore = (gameTitle, newScore) => {
+    setArcadeHighScore((prev) => {
+      const currentHigh = prev[gameTitle] || 0;
+      if (newScore > currentHigh) {
+        const updated = { ...prev, [gameTitle]: newScore };
+        localStorage.setItem("arcade_high_scores", JSON.stringify(updated));
+        return updated;
+      }
+      return prev;
+    });
+  };
+
+  // Filtering Logic for Games
+  const filteredGames = Array.isArray(games)
+    ? games.filter((game) => {
+        const matchesSearch =
+          game.title?.toLowerCase().includes(gameSearchQuery.toLowerCase()) ||
+          (game.description && game.description.toLowerCase().includes(gameSearchQuery.toLowerCase())) ||
+          game.genre?.toLowerCase().includes(gameSearchQuery.toLowerCase()) ||
+          game.platform?.toLowerCase().includes(gameSearchQuery.toLowerCase());
+
+        const matchesGenre = selectedGenre === "All" || game.genre === selectedGenre;
+        const matchesPlatform = selectedPlatform === "All" || game.platform?.toLowerCase().includes(selectedPlatform.toLowerCase());
+
+        return matchesSearch && matchesGenre && matchesPlatform;
+      })
+    : [];
+
+  // Extract unique genres for filter dropdown
+  const genres = ["All", ...new Set(Array.isArray(games) ? games.map((g) => g.genre) : [])];
+  const platforms = ["All", "PC", "PlayStation", "Xbox", "Nintendo Switch", "Mobile"];
+
   // Helper: Format currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat("en-US", {
@@ -368,6 +533,20 @@ function App() {
               </svg>
               Product Catalog
             </button>
+
+            <button
+              onClick={() => setActiveTab("games")}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer ${
+                activeTab === "games"
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/10"
+                  : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+              </svg>
+              Games Arena
+            </button>
           </nav>
         </div>
 
@@ -433,7 +612,7 @@ function App() {
                 <button
                   onClick={() => {
                     setLoading(true);
-                    Promise.all([fetchStats(), fetchUsers(), fetchProducts()]).finally(() => setLoading(false));
+                    Promise.all([fetchStats(), fetchUsers(), fetchProducts(), fetchGames()]).finally(() => setLoading(false));
                   }}
                   className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 transition-all rounded-xl px-4 py-2.5 text-sm font-semibold cursor-pointer"
                 >
@@ -442,7 +621,7 @@ function App() {
               </div>
 
               {/* Statistics Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
                 {/* Users Stat Card */}
                 <div className="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all">
                   <div className="flex justify-between items-start">
@@ -479,6 +658,24 @@ function App() {
                   </div>
                   <div className="flex items-center gap-1.5 mt-4 text-xs font-medium text-slate-500">
                     <span className="font-bold text-slate-700">{stats.total_stock}</span> total items in stock
+                  </div>
+                </div>
+
+                {/* Games Stat Card */}
+                <div className="bg-white border border-slate-200/80 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Games in System</p>
+                      <h3 className="text-3xl font-extrabold text-slate-800 mt-2">{stats.total_games || 0}</h3>
+                    </div>
+                    <div className="p-3 bg-fuchsia-50 text-fuchsia-600 rounded-xl">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-4 text-xs font-medium text-slate-500">
+                    <span className="font-bold text-slate-700">{stats.total_games || 0}</span> active titles
                   </div>
                 </div>
 
@@ -563,8 +760,8 @@ function App() {
                 </div>
               )}
 
-              {/* Split Feed Grid (Recent Users / Recent Products) */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Split Feed Grid (Recent Users / Recent Products / Recent Games) */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Recent Users List */}
                 <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                   <div className="flex justify-between items-center mb-6">
@@ -645,6 +842,51 @@ function App() {
                               }`}
                             >
                               {p.stock === 0 ? "Out of Stock" : `${p.stock} units left`}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Recent Games List */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800">Recently Added Games</h3>
+                      <p className="text-xs text-slate-400 font-medium">Fresh titles in database</p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab("games")}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                    >
+                      View Arena
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-slate-100">
+                    {!stats.recent_games || stats.recent_games.length === 0 ? (
+                      <p className="text-sm text-center text-slate-400 py-6">No recent games found.</p>
+                    ) : (
+                      stats.recent_games.map((g) => (
+                        <div key={g.id} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-fuchsia-100 text-fuchsia-700 font-bold text-xs flex items-center justify-center">
+                              GAME
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800 truncate max-w-[120px]">{g.title}</p>
+                              <span className="text-[10px] font-bold text-fuchsia-600 bg-fuchsia-50 border border-fuchsia-100 px-1.5 py-0.5 rounded-md uppercase">
+                                {g.genre}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <p className="text-sm font-extrabold text-slate-800">{formatCurrency(g.price)}</p>
+                            <p className="text-[10px] font-bold text-amber-500 flex items-center gap-0.5 justify-end">
+                              ★ {g.rating?.toFixed(1)}
                             </p>
                           </div>
                         </div>
@@ -922,6 +1164,185 @@ function App() {
               </div>
             </div>
           )}
+
+          {/* TAB 4: GAMES ARENA VIEW */}
+          {activeTab === "games" && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h1 className="text-2xl font-black text-slate-800 tracking-tight">Games Arena</h1>
+                  <p className="text-sm text-slate-400 font-medium">Add, manage, review, and organize video games in your system.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingGameId(null);
+                    setGameForm({ title: "", description: "", genre: "", platform: "", release_year: "", rating: "", price: "", image_url: "" });
+                    setShowGameModal(true);
+                  }}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-md shadow-blue-600/10 cursor-pointer"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  Add New Game
+                </button>
+              </div>
+
+              {/* Action, Search, & Filtering bar */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center gap-4 justify-between">
+                <div className="relative w-full max-w-md">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Search game title, genre, platform..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all placeholder:text-slate-400"
+                    value={gameSearchQuery}
+                    onChange={(e) => setGameSearchQuery(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">Genre</label>
+                    <select
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer"
+                      value={selectedGenre}
+                      onChange={(e) => setSelectedGenre(e.target.value)}
+                    >
+                      {genres.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider shrink-0">Platform</label>
+                    <select
+                      className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer"
+                      value={selectedPlatform}
+                      onChange={(e) => setSelectedPlatform(e.target.value)}
+                    >
+                      {platforms.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Games Grid */}
+              {filteredGames.length === 0 ? (
+                <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-sm text-slate-400 shadow-sm">
+                  No games matching the description. Add some games or adjust search queries.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {filteredGames.map((game) => (
+                    <div key={game.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden hover:shadow-md transition-all flex flex-col group animate-fade-in">
+                      {/* Game Cover Image */}
+                      <div className="h-48 w-full overflow-hidden bg-slate-100 relative shrink-0">
+                        {game.image_url ? (
+                          <img
+                            src={game.image_url}
+                            alt={game.title}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = ""; // Clear on error to fallback
+                            }}
+                          />
+                        ) : null}
+                        {/* Fallback/Overlay Gradient if image missing or fails */}
+                        {(!game.image_url) && (
+                          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-fuchsia-600 flex items-center justify-center text-white font-black text-xl tracking-wider uppercase p-4 text-center">
+                            {game.title}
+                          </div>
+                        )}
+                        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-xs text-white text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                          <span className="text-yellow-400">★</span>
+                          <span>{game.rating?.toFixed(1)}</span>
+                        </div>
+                      </div>
+
+                      {/* Game Details */}
+                      <div className="p-5 flex-1 flex flex-col justify-between">
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              {game.genre}
+                            </span>
+                            <span className="text-[10px] font-black text-slate-500 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                              {game.release_year}
+                            </span>
+                          </div>
+
+                          <div>
+                            <h3 className="font-extrabold text-slate-800 text-base leading-snug group-hover:text-blue-600 transition-colors">
+                              {game.title}
+                            </h3>
+                            <p className="text-xs text-slate-400 font-medium mt-1.5 line-clamp-2">
+                              {game.description || "No description provided."}
+                            </p>
+                          </div>
+
+                          <div className="pt-2">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Platforms</p>
+                            <p className="text-xs font-semibold text-slate-600 mt-0.5">{game.platform}</p>
+                          </div>
+                        </div>
+
+                        <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-lg font-black text-slate-800">
+                            {formatCurrency(game.price)}
+                          </span>
+
+                          <div className="flex gap-1.5 items-center">
+                            <button
+                              onClick={() => setActivePlayGame(game)}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+                              title="Play game inside project"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              Play
+                            </button>
+                            <button
+                              onClick={() => openEditGame(game)}
+                              className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-xl transition-all cursor-pointer"
+                              title="Edit game details"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteGame(game.id)}
+                              className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                              title="Delete game"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 
@@ -1104,6 +1525,157 @@ function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* GAME SLIDING PANEL MODAL */}
+      {showGameModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-zoom-in">
+            <div className="bg-slate-900 text-white p-6 flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-extrabold tracking-tight">
+                  {editingGameId ? "Edit Game Details" : "Add New Game"}
+                </h3>
+                <p className="text-slate-400 text-xs mt-0.5">Please provide specifications for the video game.</p>
+              </div>
+              <button
+                onClick={() => setShowGameModal(false)}
+                className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleGameSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="space-y-1">
+                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Game Title</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Witcher 3, Cyberpunk 2077"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
+                  value={gameForm.title}
+                  onChange={(e) => setGameForm({ ...gameForm, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Game Description</label>
+                <textarea
+                  placeholder="e.g. An open-world action RPG set in a fantasy universe..."
+                  className="w-full px-4 py-2 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all h-20 resize-none"
+                  value={gameForm.description}
+                  onChange={(e) => setGameForm({ ...gameForm, description: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Genre</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. RPG, Action, Sandbox"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
+                    value={gameForm.genre}
+                    onChange={(e) => setGameForm({ ...gameForm, genre: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Platforms</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. PC, PlayStation, Xbox"
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
+                    value={gameForm.platform}
+                    onChange={(e) => setGameForm({ ...gameForm, platform: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Release Year</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 2022"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
+                    value={gameForm.release_year}
+                    onChange={(e) => setGameForm({ ...gameForm, release_year: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Rating (0-10)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="e.g. 9.5"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
+                    value={gameForm.rating}
+                    onChange={(e) => setGameForm({ ...gameForm, rating: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Price (USD)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 59.99"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
+                    value={gameForm.price}
+                    onChange={(e) => setGameForm({ ...gameForm, price: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Image URL (Optional)</label>
+                <input
+                  type="url"
+                  placeholder="e.g. https://images.unsplash.com/..."
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all"
+                  value={gameForm.image_url}
+                  onChange={(e) => setGameForm({ ...gameForm, image_url: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-slate-100 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowGameModal(false)}
+                  className="px-4 py-2.5 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl text-sm font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md shadow-blue-600/10 cursor-pointer"
+                >
+                  {editingGameId ? "Save Changes" : "Add Game"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ARCADE CABINET PLAY MODAL */}
+      {activePlayGame && (
+        <ArcadeCabinet
+          game={activePlayGame}
+          onClose={() => setActivePlayGame(null)}
+          highScore={arcadeHighScore}
+          onUpdateHighScore={updateArcadeHighScore}
+        />
       )}
     </div>
   );

@@ -105,3 +105,64 @@ def delete_product(db: Session, product_id: int):
     db.commit()
 
     return db_product
+
+
+# Game CRUD operations
+def create_game(db: Session, game: schemas.GameCreate):
+    db_game = models.Game(
+        title=game.title,
+        description=game.description,
+        genre=game.genre,
+        platform=game.platform,
+        release_year=game.release_year,
+        rating=game.rating,
+        price=game.price,
+        image_url=game.image_url
+    )
+
+    db.add(db_game)
+    db.commit()
+    db.refresh(db_game)
+
+    return db_game
+
+
+def get_games(db: Session):
+    return db.query(models.Game).all()
+
+
+def get_game_by_id(db: Session, game_id: int):
+    return db.query(models.Game).filter(models.Game.id == game_id).first()
+
+
+def update_game(db: Session, game_id: int, game: schemas.GameCreate):
+    db_game = get_game_by_id(db, game_id)
+
+    if not db_game:
+        return None
+
+    db_game.title = game.title
+    db_game.description = game.description
+    db_game.genre = game.genre
+    db_game.platform = game.platform
+    db_game.release_year = game.release_year
+    db_game.rating = game.rating
+    db_game.price = game.price
+    db_game.image_url = game.image_url
+
+    db.commit()
+    db.refresh(db_game)
+
+    return db_game
+
+
+def delete_game(db: Session, game_id: int):
+    db_game = get_game_by_id(db, game_id)
+
+    if not db_game:
+        return None
+
+    db.delete(db_game)
+    db.commit()
+
+    return db_game

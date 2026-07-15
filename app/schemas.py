@@ -28,3 +28,21 @@ class ProductResponse(ProductCreate):
 
     class Config:
         from_attributes = True
+
+
+class GameCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    genre: str
+    platform: str
+    release_year: int
+    rating: float
+    price: float
+    image_url: Optional[str] = None
+
+
+class GameResponse(GameCreate):
+    id: int
+
+    class Config:
+        from_attributes = True
