@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Literal, Optional
 
 
 class UserCreate(BaseModel):
@@ -46,3 +46,25 @@ class GameResponse(GameCreate):
 
     class Config:
         from_attributes = True
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+
+
+class ChatRequest(BaseModel):
+    messages: list[ChatMessage] = Field(min_length=1)
+    include_context: bool = True
+
+
+class ChatResponse(BaseModel):
+    message: ChatMessage
+    model: str
+    mode: Literal["demo", "live"] = "live"
+
+
+class ChatStatusResponse(BaseModel):
+    configured: bool
+    model: str
+    mode: Literal["demo", "live"] = "live"
