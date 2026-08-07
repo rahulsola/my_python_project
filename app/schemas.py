@@ -61,10 +61,10 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: ChatMessage
     model: str
-    mode: Literal["demo", "live"] = "live"
+    mode: Literal["demo", "live", "fallback"] = "live"
 
 
 class ChatStatusResponse(BaseModel):
     configured: bool
     model: str
-    mode: Literal["demo", "live"] = "live"
+    mode: Literal["demo", "live", "fallback"] = "live"

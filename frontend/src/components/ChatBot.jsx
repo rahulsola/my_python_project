@@ -46,6 +46,9 @@ export default function ChatBot({ showToast }) {
         include_context: includeContext,
       });
       setMessages((prev) => [...prev, response.data.message]);
+      if (response.data.mode) {
+        setMode(response.data.mode);
+      }
     } catch (error) {
       const detail =
         error.response?.data?.detail || "Failed to get a response from the AI assistant.";
@@ -72,7 +75,7 @@ export default function ChatBot({ showToast }) {
         <div>
           <h1 className="text-2xl font-black text-slate-800 tracking-tight">AI Assistant</h1>
           <p className="text-sm text-slate-400 font-medium">
-            Chat with Nexus AI powered by a large language model.
+            Chat with Nexus AI powered by Google Gemini.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -94,14 +97,39 @@ export default function ChatBot({ showToast }) {
         </div>
       </div>
 
+      {mode === "live" && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-2 text-xs text-emerald-800 font-semibold">
+          Gemini AI connected
+        </div>
+      )}
+
       {mode === "demo" && (
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-900">
           <p className="font-bold">Demo mode active</p>
           <p className="mt-1 text-xs">
-            The chatbot works with your app data, but full AI replies need an API key. Add{" "}
-            <code className="bg-amber-100 px-1 rounded">LLM_API_KEY=your-key</code> to{" "}
+            The chatbot works with your app data, but full AI replies need a Gemini API key. Add{" "}
+            <code className="bg-amber-100 px-1 rounded">GEMINI_API_KEY=your-key</code> to{" "}
             <code className="bg-amber-100 px-1 rounded">.env</code> and restart the server.
           </p>
+        </div>
+      )}
+
+      {mode === "fallback" && (
+        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 text-sm text-rose-900">
+          <p className="font-bold">Gemini API needs setup</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            Your <code className="bg-rose-100 px-1 rounded">GEMINI_API_KEY</code> is set, but Google Cloud must enable the API first.
+          </p>
+          <ol className="mt-2 text-xs list-decimal list-inside space-y-1">
+            <li>
+              Enable{" "}
+              <a className="underline font-semibold" href="https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com" target="_blank" rel="noreferrer">
+                Generative Language API
+              </a>
+            </li>
+            <li>Restrict your API key to Generative Language API</li>
+            <li>Wait 1-2 minutes, restart the server, and try again</li>
+          </ol>
         </div>
       )}
 

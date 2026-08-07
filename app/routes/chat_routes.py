@@ -5,7 +5,16 @@ from sqlalchemy import func
 from ..database import get_db
 from ..models import User, Product, Game
 from .. import schemas
-from ..services.llm_service import generate_chat_response, is_llm_configured, LLM_MODEL, DEMO_MODEL
+from ..services.llm_service import (
+    generate_chat_response,
+    generate_fallback_response,
+    is_llm_configured,
+    _active_model_name,
+    DEMO_MODEL,
+    _is_auth_error,
+    _is_quota_error,
+    _is_permission_error,
+)
 
 router = APIRouter()
 
@@ -44,7 +53,7 @@ def get_chat_status():
     configured = is_llm_configured()
     return schemas.ChatStatusResponse(
         configured=configured,
-        model=LLM_MODEL if configured else DEMO_MODEL,
+        model=_active_model_name() if configured else DEMO_MODEL,
         mode="live" if configured else "demo",
     )
 
@@ -58,12 +67,19 @@ def chat(request: schemas.ChatRequest, db: Session = Depends(get_db)):
     history = [{"role": m.role, "content": m.content} for m in request.messages]
 
     try:
-        reply, model = generate_chat_response(history, context=context)
+        reply, model, mode = generate_chat_response(history, context=context)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"LLM request failed: {exc}") from exc
+        if _is_permission_error(exc):
+            reply, model, mode = generate_fallback_response(history, context, reason="permission")
+        elif _is_auth_error(exc):
+            reply, model, mode = generate_fallback_response(history, context, reason="auth")
+        elif _is_quota_error(exc):
+            reply, model, mode = generate_fallback_response(history, context, reason="quota")
+        else:
+            raise HTTPException(status_code=502, detail=f"LLM request failed: {exc}") from exc
 
     return schemas.ChatResponse(
         message=schemas.ChatMessage(role="assistant", content=reply),
         model=model,
-        mode="live" if is_llm_configured() else "demo",
+        mode=mode,
     )
