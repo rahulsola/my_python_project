@@ -53,6 +53,14 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class StoredChatMessageResponse(ChatMessage):
+    id: int
+    created_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
     include_context: bool = True
@@ -62,6 +70,8 @@ class ChatResponse(BaseModel):
     message: ChatMessage
     model: str
     mode: Literal["demo", "live", "fallback"] = "live"
+    id: Optional[int] = None
+    created_at: Optional[str] = None
 
 
 class ChatStatusResponse(BaseModel):

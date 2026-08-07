@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime, func
 from .database import Base
 
 
@@ -34,3 +34,12 @@ class Game(Base):
     rating = Column(Float, default=0.0)
     price = Column(Float, default=0.0)
     image_url = Column(String, nullable=True)
+
+
+class StoredChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

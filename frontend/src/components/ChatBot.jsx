@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import API from "../api/userApi";
 
 const WELCOME_MESSAGE = {
+  id: "welcome",
   role: "assistant",
   content:
     "Hi! I'm Nexus AI. Ask me anything about your users, products, games, or general questions.",
@@ -11,11 +12,30 @@ export default function ChatBot({ showToast }) {
   const [messages, setMessages] = useState([WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [mode, setMode] = useState("demo");
   const [includeContext, setIncludeContext] = useState(true);
   const messagesEndRef = useRef(null);
 
+  const loadChatHistory = async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await API.get("/chat/messages");
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        setMessages(response.data);
+      } else {
+        setMessages([WELCOME_MESSAGE]);
+      }
+    } catch (error) {
+      console.error("Error loading chat history:", error);
+      setMessages([WELCOME_MESSAGE]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
+    loadChatHistory();
     API.get("/chat/status")
       .then((res) => {
         setMode(res.data.mode || (res.data.configured ? "live" : "demo"));
@@ -35,7 +55,7 @@ export default function ChatBot({ showToast }) {
     if (!text || loading) return;
 
     const userMessage = { role: "user", content: text };
-    const nextMessages = [...messages, userMessage];
+    const nextMessages = [...messages.filter((m) => m.id !== "welcome"), userMessage];
     setMessages(nextMessages);
     setInput("");
     setLoading(true);
@@ -45,7 +65,12 @@ export default function ChatBot({ showToast }) {
         messages: nextMessages.filter((m) => m.role !== "system"),
         include_context: includeContext,
       });
-      setMessages((prev) => [...prev, response.data.message]);
+      const assistantMessage = {
+        ...response.data.message,
+        id: response.data.id,
+        created_at: response.data.created_at,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
       if (response.data.mode) {
         setMode(response.data.mode);
       }
@@ -65,8 +90,15 @@ export default function ChatBot({ showToast }) {
     }
   };
 
-  const clearChat = () => {
-    setMessages([WELCOME_MESSAGE]);
+  const clearChat = async () => {
+    try {
+      await API.delete("/chat/messages");
+      setMessages([WELCOME_MESSAGE]);
+      showToast("Chat history cleared");
+    } catch (error) {
+      console.error("Error clearing chat:", error);
+      showToast("Failed to clear chat history", "error");
+    }
   };
 
   return (
@@ -135,22 +167,26 @@ export default function ChatBot({ showToast }) {
 
       <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col min-h-[520px] overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {messages.map((msg, index) => (
-            <div
-              key={index}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
+          {historyLoading ? (
+            <div className="flex justify-center py-12 text-sm text-slate-400">Loading chat history...</div>
+          ) : (
+            messages.map((msg, index) => (
               <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-                  msg.role === "user"
-                    ? "bg-blue-600 text-white rounded-br-md"
-                    : "bg-slate-100 text-slate-800 rounded-bl-md"
-                }`}
+                key={msg.id ?? index}
+                className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
-                {msg.content}
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                    msg.role === "user"
+                      ? "bg-blue-600 text-white rounded-br-md"
+                      : "bg-slate-100 text-slate-800 rounded-bl-md"
+                  }`}
+                >
+                  {msg.content}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
 
           {loading && (
             <div className="flex justify-start">
@@ -172,12 +208,12 @@ export default function ChatBot({ showToast }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask about users, products, games, or anything else..."
-            disabled={loading}
+            disabled={loading || historyLoading}
             className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 hover:border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl text-sm font-medium text-slate-800 transition-all placeholder:text-slate-400 disabled:opacity-60"
           />
           <button
             type="submit"
-            disabled={loading || !input.trim()}
+            disabled={loading || historyLoading || !input.trim()}
             className="px-5 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-xl text-sm font-bold shadow-md shadow-blue-600/10 cursor-pointer disabled:cursor-not-allowed"
           >
             Send

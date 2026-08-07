@@ -166,3 +166,20 @@ def delete_game(db: Session, game_id: int):
     db.commit()
 
     return db_game
+
+
+def get_chat_messages(db: Session):
+    return db.query(models.StoredChatMessage).order_by(models.StoredChatMessage.id.asc()).all()
+
+
+def create_chat_message(db: Session, role: str, content: str):
+    message = models.StoredChatMessage(role=role, content=content)
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return message
+
+
+def clear_chat_messages(db: Session):
+    db.query(models.StoredChatMessage).delete()
+    db.commit()

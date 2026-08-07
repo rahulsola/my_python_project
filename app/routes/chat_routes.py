@@ -4,7 +4,7 @@ from sqlalchemy import func
 
 from ..database import get_db
 from ..models import User, Product, Game
-from .. import schemas
+from .. import crud, schemas
 from ..services.llm_service import (
     generate_chat_response,
     generate_fallback_response,
@@ -48,6 +48,23 @@ def _build_app_context(db: Session) -> str:
     return "\n".join(lines)
 
 
+def _serialize_message(message) -> schemas.StoredChatMessageResponse:
+    return schemas.StoredChatMessageResponse(
+        id=message.id,
+        role=message.role,
+        content=message.content,
+        created_at=message.created_at.isoformat() if message.created_at else None,
+    )
+
+
+def _db_messages_to_history(db: Session) -> list[dict]:
+    return [
+        {"role": message.role, "content": message.content}
+        for message in crud.get_chat_messages(db)
+        if message.role in {"user", "assistant"}
+    ]
+
+
 @router.get("/chat/status", response_model=schemas.ChatStatusResponse)
 def get_chat_status():
     configured = is_llm_configured()
@@ -58,13 +75,30 @@ def get_chat_status():
     )
 
 
+@router.get("/chat/messages", response_model=list[schemas.StoredChatMessageResponse])
+def list_chat_messages(db: Session = Depends(get_db)):
+    return [_serialize_message(message) for message in crud.get_chat_messages(db)]
+
+
+@router.delete("/chat/messages")
+def delete_chat_messages(db: Session = Depends(get_db)):
+    crud.clear_chat_messages(db)
+    return {"message": "Chat history cleared"}
+
+
 @router.post("/chat", response_model=schemas.ChatResponse)
 def chat(request: schemas.ChatRequest, db: Session = Depends(get_db)):
     if not request.messages:
         raise HTTPException(status_code=400, detail="At least one message is required")
 
+    last_message = request.messages[-1]
+    if last_message.role != "user":
+        raise HTTPException(status_code=400, detail="Last message must be from the user")
+
+    crud.create_chat_message(db, role="user", content=last_message.content)
+
     context = _build_app_context(db) if request.include_context else None
-    history = [{"role": m.role, "content": m.content} for m in request.messages]
+    history = _db_messages_to_history(db)
 
     try:
         reply, model, mode = generate_chat_response(history, context=context)
@@ -78,8 +112,12 @@ def chat(request: schemas.ChatRequest, db: Session = Depends(get_db)):
         else:
             raise HTTPException(status_code=502, detail=f"LLM request failed: {exc}") from exc
 
+    saved_reply = crud.create_chat_message(db, role="assistant", content=reply)
+
     return schemas.ChatResponse(
         message=schemas.ChatMessage(role="assistant", content=reply),
         model=model,
         mode=mode,
+        id=saved_reply.id,
+        created_at=saved_reply.created_at.isoformat() if saved_reply.created_at else None,
     )
