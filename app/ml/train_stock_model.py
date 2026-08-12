@@ -1,7 +1,7 @@
-"""Train the stock prediction model from current product data."""
+"""Train the stock prediction model offline from current product data."""
 
 from app.database import SessionLocal
-from app.services.ml_service import train_stock_model
+from app.ml.trainer import train_stock_model
 
 
 def main():
@@ -9,6 +9,8 @@ def main():
     try:
         result = train_stock_model(db)
         print(result)
+        if result.get("trained"):
+            print("\nRestart the FastAPI server to load the new model.")
     finally:
         db.close()
 

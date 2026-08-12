@@ -1,16 +1,61 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import joblib
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
 from sqlalchemy.orm import Session
 
+from ..ml.constants import LOW_STOCK_THRESHOLD, MODEL_PATH
 from ..models import Product
 
-MODEL_PATH = Path(__file__).resolve().parent.parent / "ml" / "models" / "stock_model.pkl"
-LOW_STOCK_THRESHOLD = 10
+_model_bundle: dict | None = None
+
+
+def init_ml_model() -> None:
+    """Load the saved model once when FastAPI starts."""
+    global _model_bundle
+
+    if not MODEL_PATH.exists():
+        _model_bundle = None
+        print("[ML] No model file found. Train offline with: python -m app.ml.train_stock_model")
+        return
+
+    loaded = joblib.load(MODEL_PATH)
+    if isinstance(loaded, dict) and "model" in loaded:
+        _model_bundle = loaded
+    else:
+        _model_bundle = {
+            "model": loaded,
+            "feature_columns": ["price", "stock"],
+            "threshold": LOW_STOCK_THRESHOLD,
+            "trained_at": None,
+            "product_count": None,
+        }
+    feature_count = len(_model_bundle.get("feature_columns", []))
+    trained_at = _model_bundle.get("trained_at", "unknown")
+    print(f"[ML] Model loaded ({feature_count} features, trained at {trained_at})")
+
+
+def get_model_status() -> dict:
+    if _model_bundle is None:
+        return {
+            "model_loaded": False,
+            "method": "rules",
+            "threshold": LOW_STOCK_THRESHOLD,
+            "trained_at": None,
+            "product_count": None,
+            "feature_count": None,
+            "train_command": "python -m app.ml.train_stock_model",
+        }
+
+    return {
+        "model_loaded": True,
+        "method": "ml",
+        "threshold": _model_bundle.get("threshold", LOW_STOCK_THRESHOLD),
+        "trained_at": _model_bundle.get("trained_at"),
+        "product_count": _model_bundle.get("product_count"),
+        "feature_count": len(_model_bundle.get("feature_columns", [])),
+        "train_command": "python -m app.ml.train_stock_model",
+    }
 
 
 def _rule_based_prediction(price: float, stock: int) -> dict:
@@ -30,60 +75,21 @@ def _rule_based_prediction(price: float, stock: int) -> dict:
     }
 
 
-def train_stock_model(db: Session) -> dict:
-    products = db.query(Product).all()
-
-    if not products:
-        if MODEL_PATH.exists():
-            MODEL_PATH.unlink()
-        return {"trained": False, "message": "No products found to train on.", "product_count": 0}
-
-    rows = [
-        {
-            "price": float(product.price or 0),
-            "stock": int(product.stock or 0),
-            "low_stock": 1 if int(product.stock or 0) < LOW_STOCK_THRESHOLD else 0,
-        }
-        for product in products
-    ]
-    df = pd.DataFrame(rows)
-
-    if df["low_stock"].nunique() < 2:
-        if MODEL_PATH.exists():
-            MODEL_PATH.unlink()
-        return {
-            "trained": False,
-            "message": "Using rule-based predictions until you have both low and healthy stock items.",
-            "product_count": len(products),
-            "method": "rules",
-        }
-
-    model = RandomForestClassifier(n_estimators=50, random_state=42)
-    model.fit(df[["price", "stock"]], df["low_stock"])
-
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, MODEL_PATH)
-
-    return {
-        "trained": True,
-        "message": "Stock prediction model trained successfully.",
-        "product_count": len(products),
-        "method": "ml",
-    }
+def _build_features(price: float, stock: int, category: str | None) -> pd.DataFrame:
+    row = pd.DataFrame(
+        [{"price": price, "stock": stock, "category": (category or "General").strip() or "General"}]
+    )
+    features = pd.get_dummies(row, columns=["category"])
+    feature_columns = _model_bundle["feature_columns"]
+    return features.reindex(columns=feature_columns, fill_value=0)
 
 
-def _load_model():
-    if not MODEL_PATH.exists():
-        return None
-    return joblib.load(MODEL_PATH)
-
-
-def predict_stock_risk(price: float, stock: int) -> dict:
-    model = _load_model()
-    if model is None:
+def predict_stock_risk(price: float, stock: int, category: str | None = None) -> dict:
+    if _model_bundle is None:
         return _rule_based_prediction(price, stock)
 
-    features = pd.DataFrame([{"price": price, "stock": stock}])
+    features = _build_features(price, stock, category)
+    model = _model_bundle["model"]
     prediction = int(model.predict(features)[0])
     probabilities = model.predict_proba(features)[0]
     confidence = float(probabilities[prediction])
@@ -97,7 +103,7 @@ def predict_stock_risk(price: float, stock: int) -> dict:
 
 def get_stock_insights(db: Session) -> dict:
     products = db.query(Product).order_by(Product.stock.asc()).all()
-    model_available = MODEL_PATH.exists()
+    status = get_model_status()
 
     insights = []
     low_stock_count = 0
@@ -105,7 +111,7 @@ def get_stock_insights(db: Session) -> dict:
     for product in products:
         price = float(product.price or 0)
         stock = int(product.stock or 0)
-        prediction = predict_stock_risk(price, stock)
+        prediction = predict_stock_risk(price, stock, product.category)
         if prediction["low_stock"]:
             low_stock_count += 1
 
@@ -123,8 +129,9 @@ def get_stock_insights(db: Session) -> dict:
         )
 
     return {
-        "model_available": model_available,
-        "threshold": LOW_STOCK_THRESHOLD,
+        "model_available": status["model_loaded"],
+        "trained_at": status["trained_at"],
+        "threshold": status["threshold"],
         "total_products": len(products),
         "low_stock_count": low_stock_count,
         "insights": insights,

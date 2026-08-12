@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from contextlib import asynccontextmanager
 import os
 
 from .database import engine, SessionLocal
@@ -12,6 +13,7 @@ from .routes.game_routes import router as game_router
 from .routes.chat_routes import router as chat_router
 from .routes.auth_routes import router as auth_router
 from .routes.ml_routes import router as ml_router
+from .services.ml_service import init_ml_model
 
 Base.metadata.create_all(bind=engine)
 
@@ -82,7 +84,14 @@ def seed_games():
 
 seed_games()
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_ml_model()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

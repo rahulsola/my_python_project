@@ -119,14 +119,18 @@ class StockInsightItem(BaseModel):
 
 class StockInsightsResponse(BaseModel):
     model_available: bool
+    trained_at: Optional[str] = None
     threshold: int
     total_products: int
     low_stock_count: int
     insights: list[StockInsightItem]
 
 
-class MlTrainResponse(BaseModel):
-    trained: bool
-    message: str
-    product_count: int
-    method: Optional[str] = None
+class MlStatusResponse(BaseModel):
+    model_loaded: bool
+    method: str
+    threshold: int
+    trained_at: Optional[str] = None
+    product_count: Optional[int] = None
+    feature_count: Optional[int] = None
+    train_command: str

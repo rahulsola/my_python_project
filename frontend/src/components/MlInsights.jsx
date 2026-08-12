@@ -3,14 +3,18 @@ import API from "../api/userApi";
 
 export default function MlInsights({ showToast }) {
   const [data, setData] = useState(null);
+  const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [training, setTraining] = useState(false);
 
   const loadInsights = async () => {
     setLoading(true);
     try {
-      const response = await API.get("/ml/stock-insights");
-      setData(response.data);
+      const [insightsRes, statusRes] = await Promise.all([
+        API.get("/ml/stock-insights"),
+        API.get("/ml/status"),
+      ]);
+      setData(insightsRes.data);
+      setStatus(statusRes.data);
     } catch (error) {
       showToast("Failed to load ML insights", "error");
     } finally {
@@ -21,19 +25,6 @@ export default function MlInsights({ showToast }) {
   useEffect(() => {
     loadInsights();
   }, []);
-
-  const handleRetrain = async () => {
-    setTraining(true);
-    try {
-      const response = await API.post("/ml/retrain");
-      showToast(response.data.message, response.data.trained ? "success" : "error");
-      await loadInsights();
-    } catch (error) {
-      showToast("Failed to retrain model", "error");
-    } finally {
-      setTraining(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -52,25 +43,30 @@ export default function MlInsights({ showToast }) {
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight">ML Stock Insights</h1>
           <p className="text-violet-100 text-sm mt-1">
-            Simple machine learning that flags products likely to run low on stock.
+            Predictions from a model trained offline and loaded once at server startup.
           </p>
         </div>
-        <button
-          onClick={handleRetrain}
-          disabled={training}
-          className="px-5 py-2.5 bg-white text-violet-700 rounded-xl text-sm font-bold shadow-md hover:bg-violet-50 disabled:opacity-60 cursor-pointer"
-        >
-          {training ? "Training..." : "Retrain Model"}
-        </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="bg-slate-900 text-slate-200 rounded-2xl p-5 border border-slate-800">
+        <p className="text-xs font-bold uppercase tracking-wider text-violet-300">Offline training</p>
+        <p className="text-sm mt-2">
+          Retrain manually in your terminal, then restart the backend to load the new model:
+        </p>
+        <code className="block mt-3 bg-slate-950 text-emerald-300 text-sm rounded-xl px-4 py-3 font-mono">
+          {status?.train_command || "python -m app.ml.train_stock_model"}
+        </code>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Model Status</p>
           <p className="text-2xl font-black text-slate-800 mt-2">
-            {data?.model_available ? "Trained" : "Rule-based"}
+            {status?.model_loaded ? "Loaded" : "Rule-based"}
           </p>
-          <p className="text-xs text-slate-500 mt-1">Threshold: stock &lt; {data?.threshold}</p>
+          <p className="text-xs text-slate-500 mt-1">
+            {status?.model_loaded ? `${status.feature_count} features` : "No .pkl file loaded"}
+          </p>
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">At Risk</p>
@@ -80,7 +76,14 @@ export default function MlInsights({ showToast }) {
         <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
           <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Products</p>
           <p className="text-2xl font-black text-slate-800 mt-2">{data?.total_products || 0}</p>
-          <p className="text-xs text-slate-500 mt-1">Analyzed by the model</p>
+          <p className="text-xs text-slate-500 mt-1">Threshold: stock &lt; {data?.threshold}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Last Trained</p>
+          <p className="text-sm font-bold text-slate-800 mt-2">
+            {status?.trained_at ? new Date(status.trained_at).toLocaleString() : "Not trained yet"}
+          </p>
+          <p className="text-xs text-slate-500 mt-1 uppercase">{status?.method || "rules"}</p>
         </div>
       </div>
 
