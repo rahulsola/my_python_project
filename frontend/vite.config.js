@@ -4,4 +4,14 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      "/auth": "http://127.0.0.1:8000",
+      "/users": "http://127.0.0.1:8000",
+      "/products": "http://127.0.0.1:8000",
+      "/games": "http://127.0.0.1:8000",
+      "/dashboard": "http://127.0.0.1:8000",
+      "/chat": "http://127.0.0.1:8000",
+    },
+  },
 });

@@ -183,3 +183,19 @@ def create_chat_message(db: Session, role: str, content: str):
 def clear_chat_messages(db: Session):
     db.query(models.StoredChatMessage).delete()
     db.commit()
+
+
+def get_account_by_email(db: Session, email: str):
+    return db.query(models.Account).filter(models.Account.email == email).first()
+
+
+def get_account_by_id(db: Session, account_id: int):
+    return db.query(models.Account).filter(models.Account.id == account_id).first()
+
+
+def create_account(db: Session, name: str, email: str, password_hash: str):
+    account = models.Account(name=name, email=email, password_hash=password_hash)
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return account

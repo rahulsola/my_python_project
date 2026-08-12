@@ -10,6 +10,7 @@ from .routes.product_routes import router as product_router
 from .routes.dashboard_routes import router as dashboard_router
 from .routes.game_routes import router as game_router
 from .routes.chat_routes import router as chat_router
+from .routes.auth_routes import router as auth_router
 
 Base.metadata.create_all(bind=engine)
 
@@ -95,6 +96,7 @@ app.include_router(product_router)
 app.include_router(dashboard_router)
 app.include_router(game_router)
 app.include_router(chat_router)
+app.include_router(auth_router)
 
 # Mount the static files (built React app) if it exists
 frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))

@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import API from "./api/userApi";
 import ArcadeCabinet from "./components/ArcadeCabinet";
 import ChatBot from "./components/ChatBot";
+import { useAuth } from "./context/AuthContext";
 
 function App() {
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [loading, setLoading] = useState(false);
 
@@ -151,18 +153,26 @@ function App() {
     }
   };
 
-  // Initial Data Fetch
+  // Initial Data Fetch - dashboard stats in background (no blocking spinner)
   useEffect(() => {
-    setLoading(true);
-    Promise.all([fetchStats(), fetchUsers(), fetchProducts(), fetchGames()]).finally(() => {
-      setLoading(false);
-    });
+    fetchStats();
   }, []);
 
-  // Fetch fresh stats whenever tabs switch to Dashboard
   useEffect(() => {
-    if (activeTab === "dashboard") {
-      fetchStats();
+    if (activeTab === "users" && users.length === 0) {
+      fetchUsers();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "products" && products.length === 0) {
+      fetchProducts();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "games" && games.length === 0) {
+      fetchGames();
     }
   }, [activeTab]);
 
@@ -447,6 +457,16 @@ function App() {
   // Extract unique categories for filter dropdown
   const categories = ["All", ...new Set(Array.isArray(products) ? products.map((p) => p.category) : [])];
 
+  const userInitials = user?.name
+    ? user.name
+        .split(" ")
+        .map((part) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "NA";
+  const firstName = user?.name?.split(" ")[0] || "User";
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
       {/* Toast Notification */}
@@ -603,12 +623,18 @@ function App() {
             )}
             <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
               <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shadow-md text-sm">
-                VK
+                {userInitials}
               </div>
               <div className="text-left">
-                <p className="text-xs font-bold text-slate-800 leading-none">Rahul S.</p>
-                <p className="text-[10px] font-semibold text-slate-400">Administrator</p>
+                <p className="text-xs font-bold text-slate-800 leading-none">{user?.name}</p>
+                <p className="text-[10px] font-semibold text-slate-400">{user?.email}</p>
               </div>
+              <button
+                onClick={logout}
+                className="ml-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-3 py-1.5 rounded-lg cursor-pointer"
+              >
+                Logout
+              </button>
             </div>
           </div>
         </header>
@@ -621,7 +647,7 @@ function App() {
               {/* Dash Welcome Banner */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-blue-700 to-indigo-800 text-white rounded-2xl p-6 shadow-lg shadow-blue-700/10">
                 <div>
-                  <h1 className="text-2xl font-extrabold tracking-tight">Welcome back, Rahul!</h1>
+                  <h1 className="text-2xl font-extrabold tracking-tight">Welcome back, {firstName}!</h1>
                   <p className="text-blue-100 text-sm mt-1">Here is a quick snapshot of your systems, users, and catalog inventory.</p>
                 </div>
                 <button
