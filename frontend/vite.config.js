@@ -12,6 +12,7 @@ export default defineConfig({
       "/games": "http://127.0.0.1:8000",
       "/dashboard": "http://127.0.0.1:8000",
       "/chat": "http://127.0.0.1:8000",
+      "/ml": "http://127.0.0.1:8000",
     },
   },
 });

@@ -104,3 +104,29 @@ class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: AccountResponse
+
+
+class StockInsightItem(BaseModel):
+    product_id: int
+    name: str
+    category: Optional[str] = None
+    price: float
+    stock: int
+    low_stock: bool
+    confidence: float
+    method: str
+
+
+class StockInsightsResponse(BaseModel):
+    model_available: bool
+    threshold: int
+    total_products: int
+    low_stock_count: int
+    insights: list[StockInsightItem]
+
+
+class MlTrainResponse(BaseModel):
+    trained: bool
+    message: str
+    product_count: int
+    method: Optional[str] = None
